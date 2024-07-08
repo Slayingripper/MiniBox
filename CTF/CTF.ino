@@ -124,7 +124,9 @@ void loop() {
   dnsServer.processNextRequest();
   server.handleClient();
   checkUdpPacket();
+  broadcastFlag();
   displayInfo();
+  
 }
 
 void setupServer(ChallengeLevel level) {
@@ -265,7 +267,7 @@ void handleShowPassword() {
   server.send(200, "application/json", response);
 }
 
-void handleChallengeLedOn() {
+void handleError() {
   server.send(403, "application/json", "{\"message\":\"Access Denied\"}");
 }
 
@@ -462,3 +464,12 @@ void animateSpinner() {
     delay(frameDelay);
   }
 }
+
+//broadcast a udp packet with the flag to the network
+void broadcastFlag() {
+  //broadcast the flag to the network
+  udp.beginPacket("CTF{This_Is_A_Flag}", 1337);
+  udp.write("CTF{This_Is_A_Flag}");
+  udp.endPacket();
+}
+
