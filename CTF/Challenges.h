@@ -6,7 +6,6 @@
 // Define challenge levels
 enum ChallengeLevel {
   EASY,
-  MEDIUM,
   HARD
 };
 

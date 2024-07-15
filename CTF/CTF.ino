@@ -33,6 +33,8 @@ char password[9];  // WiFi password, up to 8 characters plus null terminator
 const int builtInLed = LED_BUILTIN;  // Built-in LED pin
 const int apiLedPin = D3; // LED controlled via API
 const int errorLedPin = D7; // LED for errors or non-existent URLs
+const int difficultySwitch = D8; // Switch to change difficulty level
+// Toggle switch for difficulty
 
 ESP8266WebServer server(80);
 DNSServer dnsServer;
@@ -45,7 +47,7 @@ unsigned int hintPort = 808;  // port to send hint message
 const int melody[] = {660, 660, 660, 510, 660, 770};
 const int noteDurations[] = {4, 4, 4, 8, 4, 4};
 
-// 3-way switch pin
+// Define switch pin for password generation
 const int switchPin = D6;
 
 ChallengeLevel currentLevel;
@@ -53,7 +55,6 @@ ChallengeLevel currentLevel;
 // Username and password for basic authentication
 char http_username[6] = "admin"; // Mutable character array for username
 char http_password[9]; // Mutable character array for password
-
 
 void setup() {
   // Initialize serial communication
@@ -67,12 +68,12 @@ void setup() {
   }
   animateSpinner();
   display.clearDisplay();
-  //display welcome message
+  // Display welcome message
   display.setTextSize(1);
   display.setTextColor(SSD1306_WHITE);
-  //center the text
+  // Center the text
   display.setCursor((SCREEN_WIDTH - 64) / 2, SCREEN_HEIGHT / 2 - 10);
-  // make text bigger
+  // Make text bigger
   display.setTextSize(2);
   display.println("MiniBox");
   display.display();
@@ -82,6 +83,9 @@ void setup() {
   pinMode(apiLedPin, OUTPUT); // Ensure API LED pin is set as output
   pinMode(errorLedPin, OUTPUT);
   pinMode(buzzerPin, OUTPUT); // Set the buzzer pin as output
+  // Set up toggle switch for difficulty
+  pinMode(difficultySwitch, INPUT);
+  // Turn off LEDs initially
 
   digitalWrite(builtInLed, HIGH); // Turn off built-in LED (assuming active low)
   digitalWrite(apiLedPin, HIGH); // Ensure API LED is off initially
@@ -110,13 +114,17 @@ void setup() {
   Serial.print("AP Password: ");
   Serial.println(password);
 
-  // Set up the web server based on challenge level
-  currentLevel = getCurrentChallengeLevel(switchPin);
-  setupServer(currentLevel);
+  // Print difficulty switch position
 
+
+  // Set up the web server based on challenge level
+  currentLevel = getCurrentChallengeLevel(digitalRead(difficultySwitch));
+  setupServer(currentLevel);
+  Serial.print("Difficulty switch position: ");
+  Serial.println(digitalRead(difficultySwitch) == HIGH ? "EASY" : "HARD");
   // Start the UDP server
   udp.begin(localUdpPort);
-  // display initial information
+  // Display initial information
   displayInfo();
 }
 
@@ -126,11 +134,25 @@ void loop() {
   checkUdpPacket();
   broadcastFlag();
   displayInfo();
+  checkdiffstate();
+
+  // Read the switch state and update the challenge level if it has changed
+  int switchState = digitalRead(difficultySwitch);
+  ChallengeLevel newLevel = getCurrentChallengeLevel(switchState);
+  if (newLevel != currentLevel) {
+    currentLevel = newLevel;
+    Serial.print("Switch state changed to: ");
+    Serial.println(switchState == HIGH ? "EASY" : "HARD");
+
+    // Reinitialize the server based on the new challenge level
+    setupServer(currentLevel);
+    displayInfo();
+  }
   
 }
 
 void setupServer(ChallengeLevel level) {
-  // Set up the web server based on challenge level
+  server.onNotFound(handleNotFound);
   server.on("/", HTTP_GET, [](){
     if (!server.authenticate(http_username, http_password)) {
       return server.requestAuthentication();
@@ -179,28 +201,19 @@ void setupServer(ChallengeLevel level) {
       });
       break;
 
-    case MEDIUM:
-      // Randomize password
-      generateRandomPassword(password, 8);
-      break;
-
     case HARD:
       // Randomize username and password
       generateRandomUsername(http_username, 5); // Generate a random username with 5 characters
-      generateRandomPassword(password, 8); // Generate a random password with 8 characters
+      generateRandomPassword(http_password, 8); // Generate a random password with 8 characters
       break;
 
     default:
       break;
   }
-
-  // Set up other routes as needed
-
   server.onNotFound(handleNotFound);
   server.begin();
   Serial.println("Server started");
 }
-
 
 
 void handleRoot() {
@@ -394,8 +407,7 @@ ChallengeLevel getCurrentChallengeLevel(int switchPin) {
     return EASY;
   } else {
     // Add more conditions or checks for different challenge levels
-    // For simplicity, assume MEDIUM level when switch is LOW
-    return MEDIUM;
+    return HARD;
   }
 }
 
@@ -422,9 +434,6 @@ void displayInfo() {
   switch (currentLevel) {
     case EASY:
       display.print("Easy");
-      break;
-    case MEDIUM:
-      display.print("Medium");
       break;
     case HARD:
       display.print("Hard");
@@ -473,3 +482,32 @@ void broadcastFlag() {
   udp.endPacket();
 }
 
+
+void checkdiffstate() {
+  // Read the switch state
+  int switchState = digitalRead(difficultySwitch);
+  
+  // Determine the new challenge level based on the switch state
+  ChallengeLevel newLevel = getCurrentChallengeLevel(switchState);
+  
+  // Check if the challenge level has changed
+  if (newLevel != currentLevel) {
+    currentLevel = newLevel;
+    Serial.print("Switch state changed to: ");
+    Serial.println(switchState == HIGH ? "EASY" : "HARD");
+
+    // Reinitialize the server based on the new challenge level
+    setupServer(currentLevel);
+    
+    // Update the display
+    display.clearDisplay();
+    display.setTextSize(1);
+    display.setTextColor(SSD1306_WHITE);
+    display.setCursor(0, 0);
+    display.println("Difficulty:");
+    display.setTextSize(2);
+    display.setCursor(0, 10);
+    display.println(switchState == HIGH ? "EASY" : "HARD");
+    display.display();
+  }
+}
