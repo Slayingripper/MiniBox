@@ -33,7 +33,7 @@ char password[9];  // WiFi password, up to 8 characters plus null terminator
 const int builtInLed = LED_BUILTIN;  // Built-in LED pin
 const int apiLedPin = D3; // LED controlled via API
 const int errorLedPin = D7; // LED for errors or non-existent URLs
-const int difficultySwitch = D8; // Switch to change difficulty level
+const int difficultySwitch = A0; // Switch to change difficulty level
 // Toggle switch for difficulty
 
 ESP8266WebServer server(80);
@@ -118,10 +118,13 @@ void setup() {
 
 
   // Set up the web server based on challenge level
-  currentLevel = getCurrentChallengeLevel(digitalRead(difficultySwitch));
+  //read analogRead(pin) to get the value of the switch;
+  currentLevel = analogRead(difficultySwitch) > 512 ? EASY : HARD; 
+
+  //currentLevel = getCurrentChallengeLevel(digitalRead(difficultySwitch));
   setupServer(currentLevel);
   Serial.print("Difficulty switch position: ");
-  Serial.println(digitalRead(difficultySwitch) == HIGH ? "EASY" : "HARD");
+  Serial.println(currentLevel == EASY ? "EASY" : "HARD");
   // Start the UDP server
   udp.begin(localUdpPort);
   // Display initial information
