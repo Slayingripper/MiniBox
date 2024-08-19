@@ -50,7 +50,7 @@
                 "MMU_IRAM_SIZE=0x8000",
                 "MMU_ICACHE_SIZE=0x8000",
                 "NONOSDK22x_190703=1",
-                "F_CPU=80000000L",
+                "F_CPU=160000000L",
                 "LWIP_OPEN_SRC",
                 "TCP_MSS=536",
                 "LWIP_FEATURES=1",
