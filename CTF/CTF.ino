@@ -4,9 +4,30 @@
 #include <WiFiUdp.h>
 #include <Wire.h>
 #include <Adafruit_GFX.h>
+#include <regex>
 #include <Adafruit_SSD1306.h>
 #include "Challenges.h"  // Include the challenges header file
+#include "Flags.h"
+// Define your flags
+const char* flags[] = {
+    FLAG_1,
+    FLAG_2,
+    FLAG_3,
+    FLAG_4,
+    FLAG_5,
+    FLAG_6,
+    FLAG_7,
+    FLAG_8,
+    FLAG_9,
+    FLAG_10
+};
 
+// Variables to track brute-force attempts
+std::map<String, int> attemptCounter;
+const int MAX_ATTEMPTS = 5;
+const int BLOCK_TIME_SECONDS = 60; // Time to block after too many attempts
+
+std::map<String, unsigned long> blockTimeMap;
 const char* spinnerFrames[] = {
   "[      ]", "[*     ]", "[**    ]", "[***   ]", 
   "[ ***  ]", "[  *** ]", "[   ***]", "[    **]",
@@ -170,6 +191,13 @@ void setupServer(ChallengeLevel level) {
       handleLedOff();
     });
 
+     server.on("/api/hashiklis", HTTP_ANY, [](){
+      if (!server.authenticate(http_username, http_password)) {
+        return server.requestAuthentication();
+      }
+      handleHashiklis();
+    });
+
     // Add API endpoint to play a buzzer tone
     server.on("/api/buzzer/play", HTTP_GET, [](){
       if (!server.authenticate(http_username, http_password)) {
@@ -177,6 +205,31 @@ void setupServer(ChallengeLevel level) {
       }
       handlePlayBuzzer();
     });
+
+    //add API endpoint to scan for available networks
+     server.on("/api/scan", HTTP_GET, [](){
+      if (!server.authenticate(http_username, http_password)) {
+        return server.requestAuthentication();
+      }
+      handleScanNetworks();
+    });
+
+        //add API endpoint to show clients
+    
+     server.on("/api/clients", HTTP_GET, [](){
+      if (!server.authenticate(http_username, http_password)) {
+        return server.requestAuthentication();
+      }
+      handleScanNetworks();
+    });
+
+    server.on("/", HTTP_GET, []() {
+    server.send(200, "text/plain", "Submit your flag via POST request to /submitFlag");
+  });
+
+  // Flag submission endpoint
+  server.on("/submitFlag", HTTP_POST, handleSubmitFlag);
+
   } else if (level == HARD) {
     // Hard level with randomized username and password
     generateRandomUsername(http_username, 5);
@@ -201,35 +254,49 @@ void handleRoot() {
 
 void handleLedOn() {
   digitalWrite(apiLedPin, LOW); // Turn the API LED on
-  server.send(200, "application/json", "{\"message\":\"API LED is ON\"}");
+  server.send(200, "application/json", "{\"message\":\"API LED is ON\" "+ String(FLAG_1) +"\"}");
+  //send FLAG 1 to the user from flag.h
 }
 
 void handleLedOff() {
   digitalWrite(apiLedPin, HIGH); // Turn the API LED off
-  server.send(200, "application/json", "{\"message\":\"API LED is OFF\"}");
+  server.send(200, "application/json", "{\"message\":\"You are in the wrong place\"}");
+  //tell user maybe this is not the place to be 
 }
 
 void handleClientList() {
-  digitalWrite(builtInLed, LOW); // Flash built-in LED when a client connects
+  // Flash built-in LED when a client connects
+  digitalWrite(builtInLed, LOW);
   delay(100);
   digitalWrite(builtInLed, HIGH);
 
+  // Get the number of connected clients
   int clientCount = WiFi.softAPgetStationNum();
   String response = "{\"client_count\":" + String(clientCount) + ",\"clients\":[";
+
+  // Get the list of connected clients
   struct station_info *stat_info = wifi_softap_get_station_info();
   while (stat_info != NULL) {
     response += "{\"mac\":\"";
     for (int i = 0; i < 6; ++i) {
-      response += String(stat_info->bssid[i], 16);
+      // Format each byte as a two-digit hexadecimal value
+      if (stat_info->bssid[i] < 16) response += "0"; // Add leading zero if necessary
+      response += String(stat_info->bssid[i], HEX);
       if (i < 5) response += ":";
     }
     response += "\"}";
     stat_info = STAILQ_NEXT(stat_info, next);
     if (stat_info != NULL) response += ",";
   }
-  response += "]}";
+  response += "],";
+
+  // Integrate the hidden flag into the JSON response
+  response += "\"flag\":\"" + String(FLAG_2) + "\"}";
+
+  // Send the final JSON response
   server.send(200, "application/json", response);
 }
+
 
 void handleScanNetworks() {
   digitalWrite(errorLedPin, LOW); // Flash error LED when scanning networks
@@ -243,7 +310,11 @@ void handleScanNetworks() {
     if (i < n - 1) response += ",";
   }
   response += "]}";
+   response += "\"flag\":\"" + String(FLAG_3) + "\"}";
   server.send(200, "application/json", response);
+  //show flag from Flags.h
+  
+
 }
 
 void handleShowPassword() {
@@ -291,15 +362,18 @@ void handleTestBuzzer() {
   }
   Serial.println("Buzzer test completed.");
 
-  server.send(200, "application/json", "{\"message\":\"Buzzer tested\"}");
+  // Include Flag 5 in the JSON response
+  String response = "{\"message\":\"Buzzer tested\", \"flag\":\"" + String(FLAG_5) + "\"}";
+  server.send(200, "application/json", response);
 }
+
 
 void handleNotFound() {
   digitalWrite(errorLedPin, LOW); // Flash error LED for not found
   delay(100);
   digitalWrite(errorLedPin, HIGH);
 
-  server.send(404, "application/json", "{\"message\":\"Not Found\"}");
+  server.send(404, "application/json", "{\"message\":\"Not Found,MAYBE SEARCH SOMEWHERE ELSE ??\"}");
 }
 
 void checkUdpPacket() {
@@ -450,8 +524,8 @@ void animateSpinner() {
 //broadcast a udp packet with the flag to the network
 void broadcastFlag() {
   //broadcast the flag to the network
-  udp.beginPacket("CTF{This_Is_A_Flag}", 1337);
-  udp.write("CTF{This_Is_A_Flag}");
+  udp.beginPacket("192.168.4.255", 1337);
+  udp.write(FLAG_9);
   udp.endPacket();
 }
 
@@ -588,6 +662,99 @@ void handlePlayBuzzer() {
   delay(duration);  // Wait for the tone to finish
   noTone(buzzerPin);  // Stop the tone
 
-  // Send a JSON response to the client
-  server.send(200, "application/json", "{\"message\":\"Buzzer played\"}");
+  String response = "{\"message\":\"Buzzer tested\", \"flag\":\"" + String(FLAG_5) + "\"}";
+  server.send(200, "application/json", response);
+
+
+  
+}
+
+void handleHashiklis() {
+  if (server.method() == HTTP_POST) {
+    String hashInput = server.arg("plain");
+
+    // Check if the input is a valid MD5 hash
+    if (isValidMD5(hashInput)) {
+      // If valid, respond with the flag
+      String flag = FLAG_6;
+      server.send(200, "application/json", "{\"flag\":\"" + flag + "\"}");
+    } else {
+      // If not valid, send back the hint again
+      String hint = "In my world, 32 characters I be, the sum of my parts, a hash you'll see. Seek me out in the land of MD5, and send me back for a reply.";
+      server.send(400, "application/json", "{\"message\":\"" + hint + "\"}");
+    }
+  } else {
+    // Send the hint if it's not a POST request
+    String hint = "In my world, 32 characters I be, the sum of my parts, a hash you'll see. Seek me out in the land of MD5, and send me back for a reply.";
+    server.send(200, "application/json", "{\"message\":\"" + hint + "\"}");
+  }
+}
+
+bool isValidMD5(String input) {
+  // MD5 hash is a 32-character string containing hexadecimal digits (0-9, a-f)
+  std::regex md5Regex("^[a-fA-F0-9]{32}$");
+  return std::regex_match(input.c_str(), md5Regex);
+}
+
+bool checkFlag(String submittedFlag, String ipAddress) {
+  // Check if IP is currently blocked
+  if (blockTimeMap.find(ipAddress) != blockTimeMap.end()) {
+    unsigned long currentTime = millis();
+    if (currentTime - blockTimeMap[ipAddress] < BLOCK_TIME_SECONDS * 1000) {
+      return false; // User is blocked
+    } else {
+      // Unblock user after block time passes
+      blockTimeMap.erase(ipAddress);
+      attemptCounter[ipAddress] = 0;
+    }
+  }
+
+  // Check if the submitted flag is correct
+  for (const char* flag : flags) {
+    if (submittedFlag.equals(flag)) {
+      // Reset attempts on correct submission
+      attemptCounter[ipAddress] = 0;
+      return true;
+    }
+  }
+
+  // If incorrect, increment attempt counter
+  if (attemptCounter.find(ipAddress) != attemptCounter.end()) {
+    attemptCounter[ipAddress]++;
+  } else {
+    attemptCounter[ipAddress] = 1;
+  }
+
+  // Check if the user should be blocked
+  if (attemptCounter[ipAddress] >= MAX_ATTEMPTS) {
+    blockTimeMap[ipAddress] = millis();
+    return false;
+  }
+
+  return false;
+}
+
+
+void handleSubmitFlag() {
+  if (server.method() == HTTP_POST) {
+    String submittedFlag = server.arg("plain");
+    String clientIP = server.client().remoteIP().toString();
+
+    // Check the submitted flag
+    if (checkFlag(submittedFlag, clientIP)) {
+      String successMessage = "Congratulations! You've found the correct flag!";
+      server.send(200, "application/json", "{\"message\":\"" + successMessage + "\"}");
+    } else {
+      if (attemptCounter[clientIP] >= MAX_ATTEMPTS) {
+        String blockMessage = "Too many incorrect attempts. You are temporarily blocked.";
+        server.send(429, "application/json", "{\"message\":\"" + blockMessage + "\"}");
+      } else {
+        String errorMessage = "Incorrect flag. Please try again.";
+        server.send(400, "application/json", "{\"message\":\"" + errorMessage + "\"}");
+      }
+    }
+  } else {
+    String errorMessage = "Please submit a flag using a POST request.";
+    server.send(405, "application/json", "{\"message\":\"" + errorMessage + "\"}");
+  }
 }
