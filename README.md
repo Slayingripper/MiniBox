@@ -1,4 +1,7 @@
 # MiniBox CTF Trainer
+![Images/minibox.jpg](Images/minibox.jpg)
+
+
 
 This project is a Capture the Flag (CTF) training platform designed to run on an ESP8266 microcontroller. It offers a variety of challenges, including web-based puzzles, cryptographic tasks, and wireless network-related challenges. The purpose of this project is to provide an interactive way to practice CTF skills in a small, embedded environment.
 
@@ -135,5 +138,6 @@ Contributions are welcome! Please fork the repository and submit a pull request 
 - [ ] Improve the web interface
 - [ ] Add a scoring system
 - [ ] refactor the code
+- [ ] inlude Schematic
 
 
