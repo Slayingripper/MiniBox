@@ -43,7 +43,7 @@ const int buzzerPin = D5;
 Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, -1);
 
 // WiFi and server settings
-const char *ssid = "MiniBox";
+const char *ssid = "MicroBox";
 char  password[9]= "12345678";
 ESP8266WebServer server(80);
 DNSServer dnsServer;
@@ -100,7 +100,7 @@ void setup() {
   display.setTextSize(2);
   display.setTextColor(SSD1306_WHITE);
   display.setCursor((SCREEN_WIDTH - 64) / 2, SCREEN_HEIGHT / 2 - 10);
-  display.println("MiniBox");
+  display.println("MicroBox");
   display.display();
   delay(2000);
 
@@ -169,88 +169,157 @@ void loop() {
 
 void setupServer(ChallengeLevel level) {
   server.onNotFound(handleNotFound);
-  server.on("/", HTTP_GET, [](){
-    if (!server.authenticate(http_username, http_password)) {
-      return server.requestAuthentication();
+
+  auto authenticateHandler = [&]() {
+    if (level == HARD && !server.authenticate(http_username, http_password)) {
+      server.requestAuthentication();
+      return true; // Indicate that authentication is required
     }
+    return false; // Authentication not required or successful
+  };
+
+  server.on("/", HTTP_GET, [authenticateHandler]() {
+    if (authenticateHandler()) return;
     handleRoot();
+    //server.send(200, "text/plain", "Submit your flag via POST request to /submitFlag");
   });
 
+  server.on("/submitFlag", HTTP_POST, [authenticateHandler]() {
+    if (authenticateHandler()) return;
+    handleSubmitFlag();
+  });
+
+  // Conditional authentication for Easy mode
   if (level == EASY) {
-    // Easy level API endpoints
-    server.on("/api/led/on", HTTP_GET, [](){
-      if (!server.authenticate(http_username, http_password)) {
-        return server.requestAuthentication();
-      }
+    server.on("/api/led/on", HTTP_GET, [authenticateHandler]() {
+      if (authenticateHandler()) return;
       handleLedOn();
     });
-    server.on("/api/led/off", HTTP_GET, [](){
-      if (!server.authenticate(http_username, http_password)) {
-        return server.requestAuthentication();
-      }
+
+    server.on("/api/led/off", HTTP_GET, [authenticateHandler]() {
+      if (authenticateHandler()) return;
       handleLedOff();
     });
 
-     server.on("/api/hashiklis", HTTP_ANY, [](){
-      if (!server.authenticate(http_username, http_password)) {
-        return server.requestAuthentication();
-      }
+    server.on("/api/hashiklis", HTTP_ANY, [authenticateHandler]() {
+      if (authenticateHandler()) return;
       handleHashiklis();
     });
 
-    // Add API endpoint to play a buzzer tone
-    server.on("/api/buzzer/play", HTTP_GET, [](){
-      if (!server.authenticate(http_username, http_password)) {
-        return server.requestAuthentication();
-      }
+    server.on("/api/buzzer/play", HTTP_GET, [authenticateHandler]() {
+      if (authenticateHandler()) return;
       handlePlayBuzzer();
     });
 
-    //add API endpoint to scan for available networks
-     server.on("/api/scan", HTTP_GET, [](){
-      if (!server.authenticate(http_username, http_password)) {
-        return server.requestAuthentication();
-      }
+    server.on("/api/scan", HTTP_GET, [authenticateHandler]() {
+      if (authenticateHandler()) return;
       handleScanNetworks();
     });
 
-        //add API endpoint to show clients
-    
-     server.on("/api/clients", HTTP_GET, [](){
-      if (!server.authenticate(http_username, http_password)) {
-        return server.requestAuthentication();
-      }
+    server.on("/api/clients", HTTP_GET, [authenticateHandler]() {
+      if (authenticateHandler()) return;
       handleScanNetworks();
     });
-
-    server.on("/", HTTP_GET, []() {
-    server.send(200, "text/plain", "Submit your flag via POST request to /submitFlag");
+    server.on("/TimeNewRoman", HTTP_GET, []() {
+    handleTimesNewRoman();
   });
-
-  // Flag submission endpoint
-  server.on("/submitFlag", HTTP_POST, handleSubmitFlag);
-
   } else if (level == HARD) {
-    // Hard level with randomized username and password
+    // Hard level setup
     generateRandomUsername(http_username, 5);
     generateRandomPassword(http_password, 8);
   }
+
   server.begin();
   Serial.println("Server started");
 }
 
 
 void handleRoot() {
-  String html = "<!DOCTYPE HTML><html><h1>MiniBox CTF Trainer</h1>";
-  html += "<p><a href=\"/api/led/on\"><button>Turn On LED</button></a></p>";
-  html += "<p><a href=\"/api/led/off\"><button>Turn Off LED</button></a></p>";
-  html += "<p><a href=\"/api/clients\"><button>Show Connected Clients</button></a></p>";
-  html += "<p><a href=\"/api/scan\"><button>Scan Wireless Networks</button></a></p>";
-  html += "<p><a href=\"/api/password\"><button>Show Current Password</button></a></p>";
-  html += "<p><a href=\"/api/buzzer/play\"><button>Play Buzzer</button></a></p>"; // Button to play buzzer
+  // Define your ASCII art and hints
+  String asciiArt = R"(
+     
+
+----------------------------------------------------------------------------------------------------
+----------------------------------------------------------------------------------------------------
+-------------------------------*##*@----------------------------------------------------------------
+------------------------------=@@%*+@---------------------------------------------------------------
+---------------------------@#+***@#*@---------------------------------------------------------------
+-----------------------=@-===*****%**@--------------------------------------------------------------
+--------------------=@=====+++****@#*%--------------------------------------------------------------
+-------------------@-===++++++*****%#*@----------------%@@--==%%%#=---@@@=--------------------------
+----------------=@===++++++++++****@#*@------------@#-%%%%%%%%%%%%%%%%%%%%=+@-----------------------
+--------------=@===+++++++++++++****%**@--------@=#%%%%%%%%%%%%%%%%%%%%%%%%%%%%@#-------------------
+-------------@-==++++++++++++====***@#*@------@=%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%@*----------------
+-----------@===+++++++++++=======****@**=---@+%%%%%%%@@%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%@=-------------
+----------#==+++++++++===========@@#@##*@-@-%%%%%@@+++++++@@@%%%%%%%%%%%%%%%%%%%%%%%%%%=#-----------
+--------@-==++++++++========@@=-----=%#*%@%%%%@#+++++++++++++#@@%%%%%%%%%%%%%%%%%%%%%%%%%@----------
+------=@-=+=+++++=======@%-----------@#%=%%@@@++++=---------++++@@%%%%%%%%%%%%%%%%%%%%%%%%=+--------
+-----=@=+++++++======@---------------@%=%@@@%+=--------------=--++@%%%%%%%%%%%%%%%%%%%%%%%%=+-------
+-----+=+++++======@=------------------=@@@@@+---------------------++@@%%%%%%%%%%%%%%%%%%%%%%=-------
+----+-+++++====@---------------------+@@@@@------------------------=+@%%%%%%%%%%%%%%%%%@%%%%%@------
+---#=++++====@----------------------@%@@@@=--------------------------+#%%%%%%%%%%%%%%%@@%%%%%%=-----
+--@-++++==@=-----------------------@=@@@@@---------------------------=+@%%%%%%%%%%%%%%@@%%%%%%@-----
+-@-+++==@=-------------------------@%@@@@@----------------------------++@%%%%%%%%%%%%@%@@%%%%%%*----
+==+++=*=---------------------------=%@@@@*-@@@@@@%-----------@@@@=-----++%%%%%%%%%%%%@%@@%%%%%%%=---
+@+++=@----------------------------==@@@@@=@@@@@@@@*--------@@@@@@@@----++@%%%%%%%%%%%%%@@@@@%%%%%=--
+-+=@------------------------------=+@@@@@-@@@@@@@@#-------+@@@@@@@@----++@%%%%%%%%%%%%@@@---@@@@%%@-
++=%------------------------=*@@@@#*@%@@@+--@@@@@@@---------@@@@@@@@----++@%%%%%%%%%%%@%@------------
+%----------=-=*@@@@++*%%%%%%%%%%%%%@#@@@@-----=-----=@@-----@@@@@@----+++@%%%%%%%%%%@@@@------------
+-------@#%%%%%%%%%%%%%%%%#%@@@%##%##@%%@@@+--------=%=@--------------++++%%%%%%%%%%@@@@-------------
+-----=+*%%%%%%@@@@#%#####*##***#*=*##@%%@@@%+++=-------------------+++++@%%%%%%%%%%@@%=-------------
+-----=@@%%*####*#**=*=##*#####+=+++++##@@@@@@@@*=--@---%---@++++++++++@@%%%%%%%%@%%%@=--------------
+------%+#%@+##**###*+#+++*+*##**+++=###@%@%@@@@@@@@@*++++++@@@@@@@@@@@@%%%%%%@@@@%@=----------------
+-------@@%%*########*==+***######=**###*%@%@#%%@@@@@@@@@@@@@@@@@@@@@%%%%%%@@@@@@--------------------
+-------+*#%@####==#####**==+=#**##+==+*#@@##=@@@+%%@@@@@@@@@@@@@%%%%%@@@@@@@------------------------
+--------@@%%#*##+*+*###*=*##*+#**#**#+#*@=*@@++@@@@@@#%@@%%%@@@@@@@@@@@@@@@@@-----------------------
+--------=*%%@####=+=*#**#++##*##*####*##-@#@=@@@@@@@@@@%%%%%%%%%%%%%%%%%@@@%%@----------------------
+---------@%%%%###+=##+####*#++==*#######@=@@#*#@@@%%%%%%%%%%%%%%%%%%%%%%%%@@@@+---------------------
+---------=*@%@*###+*==*######*=*==##**#**#@@@----@@%%%%%%%%%%%%%%%%%%%%%%%%@@@@---------------------
+----------@#%%%*##*##=+=##***=####*##*###=*@@@----@@%%%%%%%%%%%%%%%%%%%%%%%@@@%@--------------------
+-----------*@%%=##**=##+**##***++=*####*++++@@@-+@@@@%%%%%%%%%%%%%%%%@%%%%%%%%@@--------------------
+-----------@*%%@#####===**###**####=*+***#*##@%##@@@@%%%%%%%%%%%%%%@%%%%%%%%%@@@@-------------------
+------------*@%%**#******++##*#*=*+***#*#*####@#*@@@@@%%%%%%%%%%%@%%%%%%%%%%%@@@@-------------------
+------------@*%%@*####*+=#++##*##+=*=*###***##@%%@@@@@@%%%%@@@@@%%%%%%%%%%%%%@@@@-------------------
+-------------*@%%**#+*#***+=*++####+=*==*###*#*%%%%@@@@%%@@@@%%%%%%%%%%%%%%%%%@@@@------------------
+-------------@*%%@*#####**=+***###***+##**#####@%%@@@@@@%%%%%%%%%%%%%@%%%%%%@%@@@@----------*=------
+--------------*@%%###+=**##+*=+*##*#+=*=*###@@+%%%%@@@@@@%%%%%%@@@%%%%%%%%%@@@@@%%=--------*--*-----
+------***-=---@*#%@#*#**=####*=+#*##@@+%#%%%%%@@+*******@@@%%%%%%%%%%%%%%%%@@@@@@@@@---------#------
+------+-***---=%@%%#*#*+*+#%@@+%%%%%%%@@******@@#@%#%@%%##@#%@**+%@@@%%%%%%@@@@@@%@%@@*---==%#*#----
+----=--#+**----@*#%%@@+%%%%%%%%@#+****%@#%@#%@#***@%%@#%@******************@@%@@@@@@@%@@@=%@%==-----
+------*-=#+-----@@%%%%%@%+****%@#**#@@%***%@*#@%@%*#@%%%%%%%%@@@%*****@@%%%%@@@%@%%%%%%%%%%%@%%%*@+-
+--#**+#+**#+--====@@%***#@@**@%***#@#*%%@@*******@@%%%%%%@@****@@%%%%%%@@%%%@@@@@@@@@@%@@@@@@@@@@@@@
+--===##===-=======@%%%%%%%%%%%@@@**********************#@%%%%%%@@@=================================-
+------===------============@@@@%%%%%%%%%%%@@%***@@%%%%%%@@#===========*========================-----
+-----------------=----=================#@@@@%%@%%@@=================+@@@===============-------------
+-------------------------------------==================================-----------------------------
+----------------------------------------------------------------------------------------------------
+----------------------------------------------------------------------------------------------------
+  )";
+  
+  String hints = R"(
+  <h2>Welcome to MiniBox CTF Trainer</h2>
+  <p><strong>Hints:</strong></p>
+  <ul>
+    <li>Explore each API endpoint carefully.</li>
+    <li>Look for hidden flags in the responses.</li>
+    <li>Authentication might be required for some endpoints.</li>
+  </ul>
+  <p><strong>Instructions:</strong></p>
+  <ul>
+    <li>Submit your flag via POST request to <code>/submitFlag</code>.</li>
+    <li>Check the hints provided for guidance on flag submission.</li>
+  </ul>
+  )";
+
+  String html = "<!DOCTYPE HTML><html>";
+  html += "<h1>MiniBox CTF Trainer</h1>";
+  html += "<pre>" + asciiArt + "</pre>";
+  html += hints;
   html += "</html>";
+
   server.send(200, "text/html", html);
 }
+
 
 void handleLedOn() {
   digitalWrite(apiLedPin, LOW); // Turn the API LED on
@@ -757,4 +826,35 @@ void handleSubmitFlag() {
     String errorMessage = "Please submit a flag using a POST request.";
     server.send(405, "application/json", "{\"message\":\"" + errorMessage + "\"}");
   }
+}
+
+
+String caesarCipher(String input, int shift) {
+  String result = "";
+  for (int i = 0; i < input.length(); i++) {
+    char c = input[i];
+    if (isAlpha(c)) {
+      char base = isLowerCase(c) ? 'a' : 'A';
+      c = (c - base + shift) % 26 + base;
+    }
+    result += c;
+  }
+  return result;
+}
+
+bool isAlpha(char c) {
+  return (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z');
+}
+
+bool isLowerCase(char c) {
+  return c >= 'a' && c <= 'z';
+}
+
+void handleTimesNewRoman() {
+  int shift = 3; // Shift for Caesar cipher (e.g., ROT3)
+  String flag = FLAG_10; // Replace with your actual flag
+  String cipheredFlag = caesarCipher(flag, shift);
+
+  String response = "{\"ciphered_flag\":\"" + cipheredFlag + "\"}";
+  server.send(200, "application/json", response);
 }
