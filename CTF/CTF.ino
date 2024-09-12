@@ -218,7 +218,7 @@ void setupServer(ChallengeLevel level) {
 
     server.on("/api/clients", HTTP_GET, [authenticateHandler]() {
       if (authenticateHandler()) return;
-      handleScanNetworks();
+      handleClientList();
     });
     server.on("/TimeNewRoman", HTTP_GET, []() {
     handleTimesNewRoman();
@@ -808,6 +808,9 @@ void handleSubmitFlag() {
   if (server.method() == HTTP_POST) {
     String submittedFlag = server.arg("plain");
     String clientIP = server.client().remoteIP().toString();
+
+    //show submitted flag to serial monitor
+    Serial.println("Submitted flag: " + submittedFlag);
 
     // Check the submitted flag
     if (checkFlag(submittedFlag, clientIP)) {
