@@ -310,7 +310,7 @@ void handleRoot() {
     <li>Check the hints provided for guidance on flag submission.</li>
   </ul>
   )";
-
+//SHOW FLAG 4 to the user on the pag
   String html = "<!DOCTYPE HTML><html>";
   html += "<h1>MiniBox CTF Trainer</h1>";
   html += "<pre>" + asciiArt + "</pre>";
@@ -388,6 +388,7 @@ void handleScanNetworks() {
 
 void handleShowPassword() {
   String response = "{\"password\":\"" + String(password) + "\"}";
+  response += "\"flag\":\"" + String(FLAG_4) + "\"}";
   server.send(200, "application/json", response);
 }
 
