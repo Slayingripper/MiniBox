@@ -364,22 +364,8 @@ void handleScanNetworks() {
     response += "{\"ssid\":\"" + WiFi.SSID(i) + "\",\"rssi\":" + String(WiFi.RSSI(i)) + "}";
     if (i < n - 1) response += ",";
   }
-<<<<<<< HEAD
   response += "],";
   response += "\"flag\":\"" + String(FLAG_3) + "\"}";
-=======
-  response += "]}";
-   response += "\"flag\":\"" + String(FLAG_3) + "\"}";
-  server.send(200, "application/json", response);
-  //show flag from Flags.h
-  
-
-}
-
-void handleShowPassword() {
-  String response = "{\"password\":\"" + String(password) + "\"}";
-  response += "\"flag\":\"" + String(FLAG_4) + "\"}";
->>>>>>> a4546ce481c391b72a1859f97c30a29b9545f002
   server.send(200, "application/json", response);
 }
 
