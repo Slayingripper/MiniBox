@@ -7,7 +7,8 @@
 #include <regex>
 #include <Adafruit_SSD1306.h>
 #include "Challenges.h"  // Include the challenges header file
-#include "Flags.h"
+#include "Flags.h"       // Include the flags header file
+#define HTTP_TRACE ((HTTPMethod)8)
 // Define your flags
 const char* flags[] = {
     FLAG_1,
@@ -19,7 +20,17 @@ const char* flags[] = {
     FLAG_7,
     FLAG_8,
     FLAG_9,
-    FLAG_10
+    FLAG_10,
+    FLAG_11,
+    FLAG_12,
+    FLAG_13,
+    FLAG_14,
+    FLAG_15,
+    FLAG_16,
+    FLAG_17,
+    FLAG_18,
+    FLAG_19,
+    FLAG_20
 };
 
 // Variables to track brute-force attempts
@@ -83,6 +94,9 @@ ChallengeLevel currentLevel = EASY;  // Default difficulty
 char http_username[6] = "admin";
 char http_password[9] = "password";
 
+// Variables for challenges
+int currentCaptchaAnswer = 0; // For the CAPTCHA challenge
+
 void setup() {
   // Initialize serial communication
   Serial.begin(115200);
@@ -122,24 +136,20 @@ void setup() {
   checkButtonPress();
   if (buttonPressed) {
     Serial.println("Button is pressed - Hard mode activated");
-    //turn on the led to indicate the user to press the button
+    // Turn on the LED to indicate the user to press the button
     digitalWrite(builtInLed, HIGH);
-    //turn on api LED on pin d7 to indicate the user to press the button
+    // Turn on API LED on pin D7 to indicate the user to press the button
     digitalWrite(apiLedPin, HIGH);
     currentLevel = HARD;
-    //play the melody
+    // Play the melody
     for (int i = 0; i < sizeof(smelody) / sizeof(smelody[0]); i++) {
       int toneDuration = 1000 / snoteDurations[i];
       tone(buzzerPin, smelody[i], toneDuration); // Use buzzerPin for buzzer sound
       delay(toneDuration * 1.30); // Pause between notes
       noTone(buzzerPin); // Stop tone
     }
-    
-
   } 
   animateCube();
- 
-   //show a animation for those 2 seconds
 
   // Initialize WiFi access point
    if (WiFi.softAP(ssid, password)) {
@@ -158,14 +168,13 @@ void setup() {
 }
 
 void loop() {
-     dnsServer.processNextRequest();
-     server.handleClient();
-     checkUdpPacket();
+  dnsServer.processNextRequest();
+  server.handleClient();
+  checkUdpPacket();
   broadcastFlag();
   updateEncoder();
   checkButtonPress();
 }
-
 
 void setupServer(ChallengeLevel level) {
   server.onNotFound(handleNotFound);
@@ -181,7 +190,6 @@ void setupServer(ChallengeLevel level) {
   server.on("/", HTTP_GET, [authenticateHandler]() {
     if (authenticateHandler()) return;
     handleRoot();
-    //server.send(200, "text/plain", "Submit your flag via POST request to /submitFlag");
   });
 
   server.on("/submitFlag", HTTP_POST, [authenticateHandler]() {
@@ -189,7 +197,7 @@ void setupServer(ChallengeLevel level) {
     handleSubmitFlag();
   });
 
-  // Conditional authentication for Easy mode
+  // Conditional routes based on difficulty level
   if (level == EASY) {
     server.on("/api/led/on", HTTP_GET, [authenticateHandler]() {
       if (authenticateHandler()) return;
@@ -220,9 +228,53 @@ void setupServer(ChallengeLevel level) {
       if (authenticateHandler()) return;
       handleClientList();
     });
+
     server.on("/TimeNewRoman", HTTP_GET, []() {
-    handleTimesNewRoman();
-  });
+      handleTimesNewRoman();
+    });
+
+    // New complex challenges
+    server.on("/specialAgent", HTTP_GET, [authenticateHandler]() {
+      if (authenticateHandler()) return;
+      handleSpecialAgent();
+    });
+
+    server.on("/cookieMonster", HTTP_GET, [authenticateHandler]() {
+      if (authenticateHandler()) return;
+      handleCookieMonster();
+    });
+
+    server.on("/hostSecret", HTTP_GET, [authenticateHandler]() {
+      if (authenticateHandler()) return;
+      handleHostSecret();
+    });
+
+    server.on("/timingAttack", HTTP_POST, [authenticateHandler]() {
+      if (authenticateHandler()) return;
+      handleTimingAttack();
+    });
+
+    server.on("/superSecret", HTTP_GET, [authenticateHandler]() {
+      if (authenticateHandler()) return;
+      handleSuperSecret();
+    });
+
+    server.on("/traceSecret", HTTP_ANY, [authenticateHandler]() {
+  if (authenticateHandler()) return;
+  handleTraceSecret();
+});
+
+
+    server.on("/captcha", HTTP_GET, [authenticateHandler]() {
+      if (authenticateHandler()) return;
+      handleCaptcha();
+    });
+
+    server.on("/captcha", HTTP_POST, [authenticateHandler]() {
+      if (authenticateHandler()) return;
+      handleCaptchaSubmit();
+    });
+
   } else if (level == HARD) {
     // Hard level setup
     generateRandomUsername(http_username, 5);
@@ -233,67 +285,10 @@ void setupServer(ChallengeLevel level) {
   Serial.println("Server started");
 }
 
-
 void handleRoot() {
   // Define your ASCII art and hints
   String asciiArt = R"(
-     
-
-----------------------------------------------------------------------------------------------------
-----------------------------------------------------------------------------------------------------
--------------------------------*##*@----------------------------------------------------------------
-------------------------------=@@%*+@---------------------------------------------------------------
----------------------------@#+***@#*@---------------------------------------------------------------
------------------------=@-===*****%**@--------------------------------------------------------------
---------------------=@=====+++****@#*%--------------------------------------------------------------
--------------------@-===++++++*****%#*@----------------%@@--==%%%#=---@@@=--------------------------
-----------------=@===++++++++++****@#*@------------@#-%%%%%%%%%%%%%%%%%%%%=+@-----------------------
---------------=@===+++++++++++++****%**@--------@=#%%%%%%%%%%%%%%%%%%%%%%%%%%%%@#-------------------
--------------@-==++++++++++++====***@#*@------@=%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%@*----------------
------------@===+++++++++++=======****@**=---@+%%%%%%%@@%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%@=-------------
-----------#==+++++++++===========@@#@##*@-@-%%%%%@@+++++++@@@%%%%%%%%%%%%%%%%%%%%%%%%%%=#-----------
---------@-==++++++++========@@=-----=%#*%@%%%%@#+++++++++++++#@@%%%%%%%%%%%%%%%%%%%%%%%%%@----------
-------=@-=+=+++++=======@%-----------@#%=%%@@@++++=---------++++@@%%%%%%%%%%%%%%%%%%%%%%%%=+--------
------=@=+++++++======@---------------@%=%@@@%+=--------------=--++@%%%%%%%%%%%%%%%%%%%%%%%%=+-------
------+=+++++======@=------------------=@@@@@+---------------------++@@%%%%%%%%%%%%%%%%%%%%%%=-------
-----+-+++++====@---------------------+@@@@@------------------------=+@%%%%%%%%%%%%%%%%%@%%%%%@------
----#=++++====@----------------------@%@@@@=--------------------------+#%%%%%%%%%%%%%%%@@%%%%%%=-----
---@-++++==@=-----------------------@=@@@@@---------------------------=+@%%%%%%%%%%%%%%@@%%%%%%@-----
--@-+++==@=-------------------------@%@@@@@----------------------------++@%%%%%%%%%%%%@%@@%%%%%%*----
-==+++=*=---------------------------=%@@@@*-@@@@@@%-----------@@@@=-----++%%%%%%%%%%%%@%@@%%%%%%%=---
-@+++=@----------------------------==@@@@@=@@@@@@@@*--------@@@@@@@@----++@%%%%%%%%%%%%%@@@@@%%%%%=--
--+=@------------------------------=+@@@@@-@@@@@@@@#-------+@@@@@@@@----++@%%%%%%%%%%%%@@@---@@@@%%@-
-+=%------------------------=*@@@@#*@%@@@+--@@@@@@@---------@@@@@@@@----++@%%%%%%%%%%%@%@------------
-%----------=-=*@@@@++*%%%%%%%%%%%%%@#@@@@-----=-----=@@-----@@@@@@----+++@%%%%%%%%%%@@@@------------
--------@#%%%%%%%%%%%%%%%%#%@@@%##%##@%%@@@+--------=%=@--------------++++%%%%%%%%%%@@@@-------------
------=+*%%%%%%@@@@#%#####*##***#*=*##@%%@@@%+++=-------------------+++++@%%%%%%%%%%@@%=-------------
------=@@%%*####*#**=*=##*#####+=+++++##@@@@@@@@*=--@---%---@++++++++++@@%%%%%%%%@%%%@=--------------
-------%+#%@+##**###*+#+++*+*##**+++=###@%@%@@@@@@@@@*++++++@@@@@@@@@@@@%%%%%%@@@@%@=----------------
--------@@%%*########*==+***######=**###*%@%@#%%@@@@@@@@@@@@@@@@@@@@@%%%%%%@@@@@@--------------------
--------+*#%@####==#####**==+=#**##+==+*#@@##=@@@+%%@@@@@@@@@@@@@%%%%%@@@@@@@------------------------
---------@@%%#*##+*+*###*=*##*+#**#**#+#*@=*@@++@@@@@@#%@@%%%@@@@@@@@@@@@@@@@@-----------------------
---------=*%%@####=+=*#**#++##*##*####*##-@#@=@@@@@@@@@@%%%%%%%%%%%%%%%%%@@@%%@----------------------
----------@%%%%###+=##+####*#++==*#######@=@@#*#@@@%%%%%%%%%%%%%%%%%%%%%%%%@@@@+---------------------
----------=*@%@*###+*==*######*=*==##**#**#@@@----@@%%%%%%%%%%%%%%%%%%%%%%%%@@@@---------------------
-----------@#%%%*##*##=+=##***=####*##*###=*@@@----@@%%%%%%%%%%%%%%%%%%%%%%%@@@%@--------------------
------------*@%%=##**=##+**##***++=*####*++++@@@-+@@@@%%%%%%%%%%%%%%%%@%%%%%%%%@@--------------------
------------@*%%@#####===**###**####=*+***#*##@%##@@@@%%%%%%%%%%%%%%@%%%%%%%%%@@@@-------------------
-------------*@%%**#******++##*#*=*+***#*#*####@#*@@@@@%%%%%%%%%%%@%%%%%%%%%%%@@@@-------------------
-------------@*%%@*####*+=#++##*##+=*=*###***##@%%@@@@@@%%%%@@@@@%%%%%%%%%%%%%@@@@-------------------
--------------*@%%**#+*#***+=*++####+=*==*###*#*%%%%@@@@%%@@@@%%%%%%%%%%%%%%%%%@@@@------------------
--------------@*%%@*#####**=+***###***+##**#####@%%@@@@@@%%%%%%%%%%%%%@%%%%%%@%@@@@----------*=------
---------------*@%%###+=**##+*=+*##*#+=*=*###@@+%%%%@@@@@@%%%%%%@@@%%%%%%%%%@@@@@%%=--------*--*-----
-------***-=---@*#%@#*#**=####*=+#*##@@+%#%%%%%@@+*******@@@%%%%%%%%%%%%%%%%@@@@@@@@@---------#------
-------+-***---=%@%%#*#*+*+#%@@+%%%%%%%@@******@@#@%#%@%%##@#%@**+%@@@%%%%%%@@@@@@%@%@@*---==%#*#----
-----=--#+**----@*#%%@@+%%%%%%%%@#+****%@#%@#%@#***@%%@#%@******************@@%@@@@@@@%@@@=%@%==-----
-------*-=#+-----@@%%%%%@%+****%@#**#@@%***%@*#@%@%*#@%%%%%%%%@@@%*****@@%%%%@@@%@%%%%%%%%%%%@%%%*@+-
---#**+#+**#+--====@@%***#@@**@%***#@#*%%@@*******@@%%%%%%@@****@@%%%%%%@@%%%@@@@@@@@@@%@@@@@@@@@@@@@
---===##===-=======@%%%%%%%%%%%@@@**********************#@%%%%%%@@@=================================-
-------===------============@@@@%%%%%%%%%%%@@%***@@%%%%%%@@#===========*========================-----
------------------=----=================#@@@@%%@%%@@=================+@@@===============-------------
--------------------------------------==================================-----------------------------
-----------------------------------------------------------------------------------------------------
-----------------------------------------------------------------------------------------------------
+  [Your ASCII art here]
   )";
   
   String hints = R"(
@@ -303,6 +298,7 @@ void handleRoot() {
     <li>Explore each API endpoint carefully.</li>
     <li>Look for hidden flags in the responses.</li>
     <li>Authentication might be required for some endpoints.</li>
+    <li>Sometimes, devices listen on unexpected ports. Try sending messages to different ports.</li>
   </ul>
   <p><strong>Instructions:</strong></p>
   <ul>
@@ -320,17 +316,14 @@ void handleRoot() {
   server.send(200, "text/html", html);
 }
 
-
 void handleLedOn() {
   digitalWrite(apiLedPin, LOW); // Turn the API LED on
-  server.send(200, "application/json", "{\"message\":\"API LED is ON\" "+ String(FLAG_1) +"\"}");
-  //send FLAG 1 to the user from flag.h
+  server.send(200, "application/json", "{\"message\":\"API LED is ON\", \"flag\":\"" + String(FLAG_1) + "\"}");
 }
 
 void handleLedOff() {
   digitalWrite(apiLedPin, HIGH); // Turn the API LED off
   server.send(200, "application/json", "{\"message\":\"You are in the wrong place\"}");
-  //tell user maybe this is not the place to be 
 }
 
 void handleClientList() {
@@ -342,8 +335,6 @@ void handleClientList() {
   // Get the number of connected clients
   int clientCount = WiFi.softAPgetStationNum();
   String response = "{\"client_count\":" + String(clientCount) + ",\"clients\":[";
-
-  // Get the list of connected clients
   struct station_info *stat_info = wifi_softap_get_station_info();
   while (stat_info != NULL) {
     response += "{\"mac\":\"";
@@ -358,14 +349,9 @@ void handleClientList() {
     if (stat_info != NULL) response += ",";
   }
   response += "],";
-
-  // Integrate the hidden flag into the JSON response
   response += "\"flag\":\"" + String(FLAG_2) + "\"}";
-
-  // Send the final JSON response
   server.send(200, "application/json", response);
 }
-
 
 void handleScanNetworks() {
   digitalWrite(errorLedPin, LOW); // Flash error LED when scanning networks
@@ -378,109 +364,42 @@ void handleScanNetworks() {
     response += "{\"ssid\":\"" + WiFi.SSID(i) + "\",\"rssi\":" + String(WiFi.RSSI(i)) + "}";
     if (i < n - 1) response += ",";
   }
-  response += "]}";
-   response += "\"flag\":\"" + String(FLAG_3) + "\"}";
-  server.send(200, "application/json", response);
-  //show flag from Flags.h
-  
-
-}
-
-void handleShowPassword() {
-  String response = "{\"password\":\"" + String(password) + "\"}";
+  response += "],";
+  response += "\"flag\":\"" + String(FLAG_3) + "\"}";
   server.send(200, "application/json", response);
 }
-
-void handleError() {
-  server.send(403, "application/json", "{\"message\":\"Access Denied\"}");
-}
-
-void handleChallengeLedOff() {
-  server.send(403, "application/json", "{\"message\":\"Access Denied\"}");
-}
-
-void handleChallengeClientList() {
-  server.send(403, "application/json", "{\"message\":\"Access Denied\"}");
-}
-
-void handleChallengeScanNetworks() {
-  server.send(403, "application/json", "{\"message\":\"Access Denied\"}");
-}
-
-void handleChallengeShowPassword() {
-  server.send(403, "application/json", "{\"message\":\"Access Denied\"}");
-}
-
-void handleTestBuzzer() {
-  // Play Super Mario mushroom sound for the first 3 seconds
-  unsigned long startTime = millis();
-  Serial.println("Starting buzzer test...");
-  for (int i = 0; i < sizeof(melody) / sizeof(melody[0]); i++) {
-    // Check if more than 3 seconds have passed
-    if (millis() - startTime > 3000) {
-      break;
-    }
-    int toneDuration = 1000 / noteDurations[i];
-    Serial.print("Playing tone: ");
-    Serial.print(melody[i]);
-    Serial.print(" for duration: ");
-    Serial.println(toneDuration);
-    tone(buzzerPin, melody[i], toneDuration); // Use buzzerPin for buzzer sound
-    delay(toneDuration * 1.30); // Pause between notes
-    noTone(buzzerPin); // Stop tone
-  }
-  Serial.println("Buzzer test completed.");
-
-  // Include Flag 5 in the JSON response
-  String response = "{\"message\":\"Buzzer tested\", \"flag\":\"" + String(FLAG_5) + "\"}";
-  server.send(200, "application/json", response);
-}
-
 
 void handleNotFound() {
   digitalWrite(errorLedPin, LOW); // Flash error LED for not found
   delay(100);
   digitalWrite(errorLedPin, HIGH);
 
-  server.send(404, "application/json", "{\"message\":\"Not Found,MAYBE SEARCH SOMEWHERE ELSE ??\"}");
+  server.send(404, "application/json", "{\"message\":\"Not Found, maybe search somewhere else?\"}");
 }
 
 void checkUdpPacket() {
   int packetSize = udp.parsePacket();
   if (packetSize) {
-    Serial.print("Received packet of size ");
-    Serial.println(packetSize);
-    Serial.print("From ");
-    IPAddress remoteIp = udp.remoteIP();
-    Serial.print(remoteIp);
-    Serial.print(", port ");
-    Serial.println(udp.remotePort());
-
-    // Read the packet into a buffer
     char incomingPacket[255];
     int len = udp.read(incomingPacket, 255);
     if (len > 0) {
       incomingPacket[len] = 0;
     }
-    Serial.println("Contents:");
-    Serial.println(incomingPacket);
-
-    // Check if the packet has the structure of an MQTT message
-    // Here you can add your custom logic to parse and handle the packet
-    if (len >= 2 && incomingPacket[0] == 0x30) { // MQTT CONNECT message
-      Serial.println("Received MQTT CONNECT message");
-      // Handle the MQTT message accordingly
-      // Example: turn on buzzer for testing
-      handleTestBuzzer();
+    // Check if the packet content matches our secret
+    String packetContent = String(incomingPacket);
+    if (packetContent.equals("pleaseSendFlag")) {
+      // Send the flag back to the client
+      udp.beginPacket(udp.remoteIP(), udp.remotePort());
+      udp.write(FLAG_20);
+      udp.endPacket();
     } else {
-      Serial.println("Unknown packet structure. Sending hint message...");
-      sendHintMessage(remoteIp);
+      sendHintMessage(udp.remoteIP());
     }
   }
 }
 
 void sendHintMessage(IPAddress clientIp) {
-  String hintMessage = "Unknown packet structure. Hint: Send an MQTT-like packet.";
+  String hintMessage = "Unknown packet structure. Hint: Send 'pleaseSendFlag' to receive a secret.";
   udp.beginPacket(clientIp, hintPort);
   udp.write(hintMessage.c_str());
   udp.endPacket();
@@ -515,16 +434,6 @@ void generateRandomUsername(char *username, int length) {
   username[length] = '\0';  // Null-terminate the string
 }
 
-ChallengeLevel getCurrentChallengeLevel(int switchPin) {
-  // Determine the current challenge level based on switch position
-  if (digitalRead(switchPin) == LOW) {
-    return EASY;
-  } else {
-    // Add more conditions or checks for different challenge levels
-    return HARD;
-  }
-}
-
 void displayInfo() {
   display.clearDisplay();
   display.setTextSize(1);
@@ -534,7 +443,7 @@ void displayInfo() {
   display.print("Clients: ");
   display.print(WiFi.softAPgetStationNum());
 
-  //display IP address and ap password
+  // Display IP address and AP password
   display.setCursor(0, 20);
   display.print("AP IP: ");
   display.println(WiFi.softAPIP());
@@ -542,7 +451,6 @@ void displayInfo() {
   display.print("Password: ");
   display.println(password);
 
-  
   display.setCursor(0, 10);
   display.print("Difficulty: ");
   switch (currentLevel) {
@@ -556,7 +464,7 @@ void displayInfo() {
       display.print("Unknown");
       break;
   }
-  //display the username and password
+  // Display the username and password
   display.setCursor(0, 40);
   display.print("Username: ");
   display.println(http_username);
@@ -564,14 +472,10 @@ void displayInfo() {
   display.print("Password: ");
   display.println(http_password);
 
-  //show difficulty  bar depending on the encoder position
-
-  
   display.display();
 }
 
 void animateSpinner() {
-
   const int numFrames = sizeof(spinnerFrames) / sizeof(spinnerFrames[0]);
   const int frameDelay = 200;  // Adjust delay as needed for animation speed
 
@@ -590,25 +494,22 @@ void animateSpinner() {
   }
 }
 
-//broadcast a udp packet with the flag to the network
+// Broadcast a UDP packet with the flag to the network
 void broadcastFlag() {
-  //broadcast the flag to the network
+  // Broadcast the flag to the network
   udp.beginPacket("192.168.4.255", 1337);
   udp.write(FLAG_9);
   udp.endPacket();
 }
 
-
 void checkButtonPress() {
   buttonPressed = (analogRead(buttonPin) < 100);
-  //only pick up first 1 press at a time
+  // Only pick up first 1 press at a time
   delay(500);
   if (buttonPressed) {
     Serial.println("Button is pressed");
-    
   }
 }
-
 
 void updateEncoder() {
   encoderStateA = digitalRead(encoderPinA);
@@ -628,7 +529,6 @@ void updateEncoder() {
   }
 }
 
-
 // Function to animate the cube
 void animateCube() {
   float angleX = 0;
@@ -638,7 +538,7 @@ void animateCube() {
   int zOffset = SCREEN_HEIGHT / 4;
   
   unsigned long startTime = millis();
-  unsigned long animationDuration = 5000; // Duration in milliseconds (10 seconds)
+  unsigned long animationDuration = 5000; // Duration in milliseconds (5 seconds)
 
   while (millis() - startTime < animationDuration) {
     drawCube(xCenter, yCenter, zOffset, angleX, angleY);
@@ -733,9 +633,6 @@ void handlePlayBuzzer() {
 
   String response = "{\"message\":\"Buzzer tested\", \"flag\":\"" + String(FLAG_5) + "\"}";
   server.send(200, "application/json", response);
-
-
-  
 }
 
 void handleHashiklis() {
@@ -803,13 +700,12 @@ bool checkFlag(String submittedFlag, String ipAddress) {
   return false;
 }
 
-
 void handleSubmitFlag() {
   if (server.method() == HTTP_POST) {
     String submittedFlag = server.arg("plain");
     String clientIP = server.client().remoteIP().toString();
 
-    //show submitted flag to serial monitor
+    // Show submitted flag to serial monitor
     Serial.println("Submitted flag: " + submittedFlag);
 
     // Check the submitted flag
@@ -831,14 +727,13 @@ void handleSubmitFlag() {
   }
 }
 
-
 String caesarCipher(String input, int shift) {
   String result = "";
   for (int i = 0; i < input.length(); i++) {
     char c = input[i];
     if (isAlpha(c)) {
       char base = isLowerCase(c) ? 'a' : 'A';
-      c = (c - base + shift) % 26 + base;
+      c = (c - base + shift + 26) % 26 + base;
     }
     result += c;
   }
@@ -855,9 +750,93 @@ bool isLowerCase(char c) {
 
 void handleTimesNewRoman() {
   int shift = 3; // Shift for Caesar cipher (e.g., ROT3)
-  String flag = FLAG_10; // Replace with your actual flag
+  String flag = FLAG_10;
   String cipheredFlag = caesarCipher(flag, shift);
 
   String response = "{\"ciphered_flag\":\"" + cipheredFlag + "\"}";
   server.send(200, "application/json", response);
+}
+
+// New challenge handlers
+
+void handleSpecialAgent() {
+  String userAgent = server.header("User-Agent");
+  if (userAgent.equals("secret-agent")) {
+    server.send(200, "application/json", "{\"flag\":\"" + String(FLAG_11) + "\"}");
+  } else {
+    server.send(403, "application/json", "{\"message\":\"Forbidden\"}");
+  }
+}
+
+void handleCookieMonster() {
+  String cookie = server.header("Cookie");
+  if (cookie.indexOf("auth=letmein") >= 0) {
+    server.send(200, "application/json", "{\"flag\":\"" + String(FLAG_12) + "\"}");
+  } else {
+    server.sendHeader("Set-Cookie", "auth=challenge");
+    server.send(403, "application/json", "{\"message\":\"Cookie required\"}");
+  }
+}
+
+void handleHostSecret() {
+  String hostHeader = server.hostHeader();
+  if (hostHeader.equals("secret.local")) {
+    server.send(200, "application/json", "{\"flag\":\"" + String(FLAG_17) + "\"}");
+  } else {
+    server.send(403, "application/json", "{\"message\":\"Forbidden\"}");
+  }
+}
+
+void handleTimingAttack() {
+  String input = server.arg("input");
+  const char* secret = FLAG_18;
+  bool isEqual = true;
+  for (int i = 0; i < strlen(secret); i++) {
+    if (input[i] != secret[i]) {
+      isEqual = false;
+      break;
+    }
+    delay(50); // Introduce delay to simulate timing leak
+  }
+  if (isEqual && input.length() == strlen(secret)) {
+    server.send(200, "application/json", "{\"message\":\"Correct!\"}");
+  } else {
+    server.send(403, "application/json", "{\"message\":\"Incorrect\"}");
+  }
+}
+
+void handleSuperSecret() {
+  String encodedFlag = "";
+  for (int i = 0; i < strlen(FLAG_16); i++) {
+    char hexChar[3];
+    sprintf(hexChar, "%02X", FLAG_16[i]);
+    encodedFlag += hexChar;
+  }
+  server.send(200, "application/json", "{\"data\":\"" + encodedFlag + "\"}");
+}
+
+void handleTraceSecret() {
+  String method = server.header("Access-Control-Request-Method");
+  if (method.equalsIgnoreCase("TRACE")) {
+    server.send(200, "application/json", "{\"flag\":\"" + String(FLAG_19) + "\"}");
+  } else {
+    server.send(405, "application/json", "{\"message\":\"Method Not Allowed\"}");
+  }
+}
+
+void handleCaptcha() {
+  int num1 = random(1, 10);
+  int num2 = random(1, 10);
+  String captchaQuestion = "What is " + String(num1) + " + " + String(num2) + "?";
+  currentCaptchaAnswer = num1 + num2;
+  server.send(200, "application/json", "{\"question\":\"" + captchaQuestion + "\"}");
+}
+
+void handleCaptchaSubmit() {
+  String answer = server.arg("answer");
+  if (answer.equals(String(currentCaptchaAnswer))) {
+    server.send(200, "application/json", "{\"flag\":\"" + String(FLAG_13) + "\"}");
+  } else {
+    server.send(403, "application/json", "{\"message\":\"Incorrect answer\"}");
+  }
 }
